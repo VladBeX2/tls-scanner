@@ -2,6 +2,8 @@ import ssl
 import socket
 import tempfile
 import subprocess
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
 import algorithms_list as algos
 
 def get_cert_signature_algo(cert_der):
@@ -19,8 +21,57 @@ def get_cert_signature_algo(cert_der):
             return line.replace("signature algorithm:", "").strip()
     return None
 
+def get_cert_signature_algo_oid(cert_der):
+    # """Extract signature algorithm from certificate using OpenSSL."""
+    # with tempfile.NamedTemporaryFile(delete=True) as tmp:
+    #     tmp.write(cert_der)
+    #     tmp.flush()
+    #     out = subprocess.check_output([
+    #         "openssl", "x509", "-inform", "DER", "-in", tmp.name, "-text", "-noout"
+    #     ], text=True)
 
-def get_kem_via_openssl(hostname):
+    # for line in out.splitlines():
+    #     line = line.strip().lower()
+    #     if line.startswith("signature algorithm:"):
+    #         return line.replace("signature algorithm:", "").strip()
+    # return None
+    cert = x509.load_der_x509_certificate(cert_der, default_backend())
+    # Return the signature algorithm as an OID string
+    return cert.signature_algorithm_oid.dotted_string
+
+def get_kem(hostname):
+    """Ask OpenSSL which KEM was negotiated (OpenSSL ≥ 3.2)."""
+    try:
+        out = subprocess.check_output(
+            ["openssl", "s_client", "-connect", f"{hostname}:443", "-tls1_3", "-brief"],
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+    except subprocess.CalledProcessError:
+        return None
+
+    for line in out.splitlines():
+        line = line.strip()
+        if line.lower().startswith("key exchange:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+def get_kem_oid(hostname):
+    # """Ask OpenSSL which KEM was negotiated (OpenSSL ≥ 3.2)."""
+    # try:
+    #     out = subprocess.check_output(
+    #         ["openssl", "s_client", "-connect", f"{hostname}:443", "-tls1_3", "-brief"],
+    #         stderr=subprocess.STDOUT,
+    #         text=True
+    #     )
+    # except subprocess.CalledProcessError:
+    #     return None
+
+    # for line in out.splitlines():
+    #     line = line.strip()
+    #     if line.lower().startswith("key exchange:"):
+    #         return line.split(":", 1)[1].strip()
+    # return None
     """Ask OpenSSL which KEM was negotiated (OpenSSL ≥ 3.2)."""
     try:
         out = subprocess.check_output(
@@ -56,17 +107,19 @@ def scan_tls(hostname):
             print(f"Cipher:           {cipher}")
 
             # Check certificate signature algorithm
-            sig_algo = get_cert_signature_algo(cert_der)
+            sig_algo_oid = get_cert_signature_algo_oid(cert_der)
+            sig_algo=get_cert_signature_algo(cert_der)
             print(f"Cert signature:   {sig_algo}")
 
             # Check key exchange via OpenSSL
-            kem = get_kem_via_openssl(hostname)
+            kem_oid = get_kem_oid(hostname)
+            kem=get_kem(hostname)
             print(f"Key exchange:     {kem}")
 
             # === PQ Checks ===
             pq_tls = tls_version == "TLSv1.3"
-            pq_kem = kem in algos.PQ_KEMS if kem else False
-            pq_sig = any(alg in (sig_algo or "") for alg in algos.PQ_SIGNATURES)
+            pq_kem = kem in algos.PQS_KEMS if kem else False
+            pq_sig = any(alg in (sig_algo or "") for alg in algos.PQS_SIGNATURES)
 
             print("\n=== Evaluation ===")
             print(f"TLS 1.3:                          {'YES' if pq_tls else 'NO'}")
@@ -74,9 +127,9 @@ def scan_tls(hostname):
             print(f"Post-quantum cert signature:      {'YES' if pq_sig else 'NO'}")
 
             if pq_tls and pq_kem and pq_sig:
-                print("\nFINAL RESULT: 🔐 **FULLY POST-QUANTUM SAFE**")
+                print("\nFINAL RESULT:  **FULLY POST-QUANTUM SAFE**")
             else:
-                print("\nFINAL RESULT: ❌ **NOT FULLY POST-QUANTUM SAFE**")
+                print("\nFINAL RESULT:  **NOT FULLY POST-QUANTUM SAFE**")
                 if not pq_kem:
                     print(" - Key exchange is NOT post-quantum.")
                 if not pq_sig:

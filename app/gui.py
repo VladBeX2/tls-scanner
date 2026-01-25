@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QMessageBox, QDialog, QTextEdit, QSplitter)
 from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QIcon
+from scanner import scan_tls
 
 
 class ScanWorker(QThread):
@@ -19,26 +20,7 @@ class ScanWorker(QThread):
 
 
     def run(self) -> None:
-        vuln_list: list[dict] = []
-
-        #   TO DO
-        #   exemplu de rulare pentru progress bar si pentru output
-        time.sleep(3)
-        vuln_list.extend([
-            {
-                "name": "Algoritm Semnătură RSA-2048 (Non-PQC)",
-                "severity": "High",
-                "details": "Certificatul folosește RSA clasic. Acesta este vulnerabil la atacurile Shor cu calculatoare cuantice.",
-                "suggestion": "Migrați către algoritmi hibrizi sau PQC nativi (ex: Dilithium, Falcon)."
-            },
-            {
-                "name": "Schimb de chei ECDHE (Non-PQC)",
-                "severity": "Medium",
-                "details": "Schimbul de chei se bazează pe curbe eliptice clasice.",
-                "suggestion": "Implementați suport pentru Kyber sau un hibrid X25519+Kyber."
-            }
-        ])
-
+        vuln_list = scan_tls(self.__ip_addr)
         self.scan_done.emit(vuln_list)
 
 
@@ -46,7 +28,7 @@ class DetailDialog(QDialog):
     def __init__(self, vuln_data: dict) -> None:
         super().__init__()
 
-        self.setWindowTitle("Details")
+        self.setWindowTitle("Detalii")
         self.setMinimumSize(400,300)
 
         layout = QVBoxLayout()
@@ -55,24 +37,24 @@ class DetailDialog(QDialog):
         lb_title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         layout.addWidget(lb_title)
 
-        lb_severity = QLabel(f"Severity: {vuln_data['severity']}")
-        if vuln_data['severity'] == "High": lb_severity.setStyleSheet("color: red; font-weight: bold;")
-        elif vuln_data['severity'] == "Medium" : lb_severity.setStyleSheet("color: yellow; font-weight: bold;")
+        lb_severity = QLabel(f"Severitate: {vuln_data['severity']}")
+        if vuln_data['severity'] == "Mare": lb_severity.setStyleSheet("color: red; font-weight: bold;")
+        elif vuln_data['severity'] == "Medie" : lb_severity.setStyleSheet("color: yellow; font-weight: bold;")
         layout.addWidget(lb_severity)
 
-        layout.addWidget(QLabel("   Description   "))
+        layout.addWidget(QLabel("   Descriere   "))
         te_desc = QTextEdit()
         te_desc.setPlainText(vuln_data['details'])
         te_desc.setReadOnly(True)
         layout.addWidget(te_desc)
 
-        layout.addWidget(QLabel("   Suggestions   "))
+        layout.addWidget(QLabel("   Sugestii   "))
         te_suggestion = QTextEdit()
         te_suggestion.setPlainText(vuln_data['suggestion'])
         te_suggestion.setReadOnly(True)
         layout.addWidget(te_suggestion)
 
-        btn_close = QPushButton("Close")
+        btn_close = QPushButton("Închide")
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
 
@@ -82,7 +64,7 @@ class DetailDialog(QDialog):
 class ScannerAppGUI(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("TLS Scanner for Post-Quantum Vulnerabilities")
+        self.setWindowTitle("Scanner TLS pentru Vulnerabilități Post-Quantice")
         self.setMinimumSize(900, 600)
 
         self.init_ui()
@@ -102,7 +84,7 @@ class ScannerAppGUI(QMainWindow):
 
         else:
             self.__btn_scan.setEnabled(False)
-            if len(text) > 0: self.__lb_validation.setText("Invalid format")
+            if len(text) > 0: self.__lb_validation.setText("Format invalid")
             else: self.__lb_validation.setText("")
             self.__toggle_btn_style(False)
 
@@ -137,7 +119,7 @@ class ScannerAppGUI(QMainWindow):
         self.__btn_scan.setEnabled(False)
         self.__ip_input.setEnabled(False)
         self.__progress_bar.show()
-        self.__lb_status.setText(f"Scanning {target}...")
+        self.__lb_status.setText(f"Scanează {target}...")
         self.__results_list.clear()
         self.__lb_hint.hide()
 
@@ -150,11 +132,11 @@ class ScannerAppGUI(QMainWindow):
         self.__progress_bar.hide()
         self.__btn_scan.setEnabled(True)
         self.__ip_input.setEnabled(True)
-        self.__lb_status.setText("Scan DONE!")
+        self.__lb_status.setText("Scanarea s-a încheiat!")
         self.__toggle_btn_style(True)
 
         if not vuln_list:
-            item = QListWidgetItem("No vulnerabilities found!")
+            item = QListWidgetItem("Nu au fost găsite vulnerabilități!")
             item.setForeground(Qt.GlobalColor.darkGreen)
             self.__results_list.addItem(item)
             return
@@ -163,12 +145,12 @@ class ScannerAppGUI(QMainWindow):
             item = QListWidgetItem(f"[{vuln['severity']}] {vuln['name']}")
             item.setData(Qt.ItemDataRole.UserRole, vuln)
 
-            if vuln['severity'] == "High": item.setForeground(Qt.GlobalColor.red)
-            elif vuln['severity'] == "Medium": item.setForeground(Qt.GlobalColor.yellow)
+            if vuln['severity'] == "Mare": item.setForeground(Qt.GlobalColor.red)
+            elif vuln['severity'] == "Medie": item.setForeground(Qt.GlobalColor.yellow)
 
             self.__results_list.addItem(item)
 
-        self.__lb_status.setText(f"{len(vuln_list)} vulnerabilies found.")
+        self.__lb_status.setText(f"{len(vuln_list)} vulnerabilități găsite.")
 
 
     def __open_details(self, item: QListWidgetItem) -> None:
@@ -191,15 +173,15 @@ class ScannerAppGUI(QMainWindow):
         left_layout = QVBoxLayout(left_page)
         left_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        lb_input = QLabel("Configure Scan")
+        lb_input = QLabel("Configurează scanarea")
         lb_input.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         left_layout.addWidget(lb_input)
         left_layout.addSpacing(20)
 
         self.__ip_input = QLineEdit()
-        self.__ip_input.setPlaceholderText("Ex: 192.168.1.1 or example.com")
+        self.__ip_input.setPlaceholderText("Ex: 192.168.1.1 sau example.com")
         self.__ip_input.textChanged.connect(self.__validate_input)
-        left_layout.addWidget(QLabel("IP / Target Domain:"))
+        left_layout.addWidget(QLabel("IP / Domeniu țintă:"))
         left_layout.addWidget(self.__ip_input)
 
         self.__lb_validation = QLabel("")
@@ -208,7 +190,7 @@ class ScannerAppGUI(QMainWindow):
 
         left_layout.addSpacing(20)
 
-        self.__btn_scan = QPushButton("Start Scan")
+        self.__btn_scan = QPushButton("Începe scanarea")
         self.__btn_scan.setMinimumHeight(40)
         self.__btn_scan.clicked.connect(self.__start_scan)
         self.__btn_scan.setEnabled(False)
@@ -232,7 +214,7 @@ class ScannerAppGUI(QMainWindow):
         right_page = QWidget()
         right_layout = QVBoxLayout(right_page)
 
-        lb_results = QLabel("Vulnerabilities Found")
+        lb_results = QLabel("Vulnerabilități găsite")
         lb_results.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         right_layout.addWidget(lb_results)
 
@@ -241,7 +223,7 @@ class ScannerAppGUI(QMainWindow):
         self.__results_list.setAlternatingRowColors(True)
         right_layout.addWidget(self.__results_list)
 
-        self.__lb_hint = QLabel("Scan results will appear here.")
+        self.__lb_hint = QLabel("Rezultatele scanării vor apărea aici.")
         self.__lb_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.__lb_hint.setStyleSheet("color: gray;")
         right_layout.addWidget(self.__lb_hint)

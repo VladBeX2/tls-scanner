@@ -39,21 +39,26 @@ def get_cert_signature_algo_oid(cert_der):
     # Return the signature algorithm as an OID string
     return cert.signature_algorithm_oid.dotted_string
 
-def get_kem(hostname):
+def get_kem(hostname, timeout=7):
     """Ask OpenSSL which KEM was negotiated (OpenSSL ≥ 3.2)."""
     try:
-        out = subprocess.check_output(
-            ["openssl", "s_client", "-connect", f"{hostname}:443", "-tls1_3", "-brief"],
-            stderr=subprocess.STDOUT,
-            text=True
-        )
-    except subprocess.CalledProcessError:
+        p = subprocess.run(
+            ["openssl","s_client","-connect", f"{hostname}:443","-tls1_3","-brief"],
+            input="", text = True, capture_output=True, timeout = timeout)
+    
+    except subprocess.TimeoutExpired:
+        return None
+
+    out = (p.stdout or "") + "\n" + (p.stderr or "")
+    if p.returncode != 0:
         return None
 
     for line in out.splitlines():
         line = line.strip()
         if line.lower().startswith("key exchange:"):
             return line.split(":", 1)[1].strip()
+        if line.lower().startswith("server temp key:"):
+            return line.split(":",1)[1].strip()
     return None
 
 def get_kem_oid(hostname):

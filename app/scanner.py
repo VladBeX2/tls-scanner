@@ -7,7 +7,7 @@ from cryptography.hazmat.backends import default_backend
 import algorithms_list as algos
 import platform, os
 
-OPENSSL_EXE_PATH = r"C:\Users\emy\ANUL IV\Master_sem_1\protocoale\OpenSSL-Win64\bin\openssl.exe"
+OPENSSL_EXE_PATH = r".\OpenSSL-Win64\bin\openssl.exe"
 
 if platform.system() == "Windows":
     if os.path.exists(OPENSSL_EXE_PATH):

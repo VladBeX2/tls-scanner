@@ -6,7 +6,9 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 import algorithms_list as algos
 import platform, os
-
+import sys
+import ipaddress
+from urllib.parse import urlparse
 OPENSSL_EXE_PATH = r".\OpenSSL-Win64\bin\openssl.exe"
 
 if platform.system() == "Windows":
@@ -147,5 +149,32 @@ def scan_tls(hostname):
 
     return vulnerabilities
 
+def check_input(value: str):
+    try:
+        ipaddress.ip_address(value)
+        return True," "
+    except ValueError:
+        pass
+
+    parsed = urlparse(value)
+    if parsed.scheme in ("http", "https") and parsed.netloc:
+        return True," "
+
+    return False, "Format invalid. Introduceți o adresă IP sau un URL valid."
+
 if __name__ == "__main__":
-    scan_tls("google.com")
+    input_url=""
+    if len(sys.argv) > 1:
+        input_url = sys.argv[1]
+    else:
+        input_url = print("Introduceți adresa IP sau domeniul de scanat")
+        exit(0)
+
+    k,m=check_input(input_url)
+    if not k:
+        print(m)
+        exit(0)
+
+    print(f"Scanning {input_url}...")
+    v=scan_tls(input_url)
+    print(v)
